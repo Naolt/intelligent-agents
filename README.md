@@ -1,6 +1,6 @@
 # AgenticAI
 
-A comprehensive AI agent system built with TypeScript, Express, and various AI services.
+A comprehensive AI agent system built with TypeScript, Express, LangChain and Langgraph.
 
 ## Features
 
