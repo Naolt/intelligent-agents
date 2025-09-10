@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Logs
+logs/
+*.log
+log.txt
+combined.log
+
+# Database files
+*mongodb.json
+*.db
+*.sqlite
+
+# Service account files
+*service-account*.json
+*firebase*.json
+*credentials*.json
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
