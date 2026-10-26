@@ -1,128 +1,73 @@
-# AgenticAI
+# Intelligent Agents
 
-A comprehensive AI agent system built with TypeScript, Express, LangChain and Langgraph.
+> Built at Fluid AI (2025), open-sourced with permission.
 
-## Features
+A multi-agent travel and lifestyle assistant. A user chats with one endpoint, and a swarm of specialised LangGraph agents books restaurants, finds events, searches hotels and manages their calendar, handing the conversation to each other as the request changes.
 
-- Multiple AI agents for different tasks (restaurant booking, calendar management, event search, hotel booking)
-- MCP (Model Context Protocol) server integration
-- Firebase integration for push notifications
-- Authentication middleware
-- Comprehensive logging system
+## How it works
 
-## Setup
+```
+Client ──POST /api/v2/ai-chat──▶ Express API (auth, validation, logging)
+                                      │
+                                      ▼
+                         LangGraph swarm (@langchain/langgraph-swarm)
+          ┌───────────────┬───────────────┬───────────────┬───────────────┐
+          │ Restaurant     │ Calendar       │ Event          │ Hotel          │
+          │ agent (default)│ agent          │ agent          │ agent          │
+          └──────┬────────┴──────┬────────┴──────┬────────┴──────┬────────┘
+                 │  hand-off tools move the active agent between nodes  │
+                 ▼                ▼                ▼                ▼
+             MCP servers over HTTP (Google Maps, browser automation, calendar/todo,
+             Ticketmaster, Platinumlist, RateHawk) + local tools (push notifications,
+             AI phone calls via Bland)
+```
 
-### Prerequisites
+- **Agents** (`src/agents`): each agent is built by `createAgentFactory` from a system prompt, a model (GPT-4o by default) and its tool set. `createSwarm` wires them together, with the restaurant agent as the entry point.
+- **Hand-offs** (`src/tools/handOffTools.ts`): `createHandoffTool` lets any agent pass control to another, so "book dinner, then add it to my calendar" moves from the restaurant agent to the calendar agent in one conversation.
+- **Tools** (`src/tools`, `src/mcp-servers`): most tools are loaded from remote MCP servers through `@langchain/mcp-adapters`. A few run locally: Firebase push notifications and outbound phone calls.
+- **Structured responses** (`src/response`): tool results for maps, events, hotels and calendar items are turned into typed UI payloads so the client can render cards instead of plain text.
+- **Memory**: conversation state is checkpointed per thread, in memory by default or in MongoDB (`@langchain/langgraph-checkpoint-mongodb`).
 
-- Node.js (v18 or higher)
-- npm or yarn
-- MongoDB instance
-- Various API keys (see Environment Variables section)
+## Tech stack
 
-### Installation
+TypeScript · Node.js · Express · LangGraph (swarm) · LangChain · OpenAI GPT-4o · Model Context Protocol · MongoDB · Firebase Admin · Zod · Winston · Docker · Azure Container Apps
 
-1. Clone the repository:
+## Running it
+
+> The MCP servers this API called were Fluid AI's internal services and are no longer running. To use the agents end to end, point `src/mcp-servers/index.ts` at your own MCP servers. Requests are authenticated with a `token` header checked against an `access_tokens` collection in MongoDB.
+
+Requires Node.js 18+ and MongoDB.
+
 ```bash
 git clone https://github.com/Naolt/intelligent-agents.git
 cd intelligent-agents
-```
-
-2. Install dependencies:
-```bash
 npm install
+cp .env.example .env   # fill in OPENAI_API_KEY, PERSISTENCE_MONGODB_URI and the keys you need
+npm run dev            # starts on PORT (default 3000)
 ```
 
-3. Set up environment variables:
+Send a message:
+
 ```bash
-cp .env.example .env
+curl -X POST http://localhost:3000/api/v2/ai-chat \
+  -H "Content-Type: application/json" \
+  -H "token: <user token>" \
+  -d '{"message": "Find me an Italian restaurant for two tonight", "threadId": "demo-1"}'
 ```
 
-4. Fill in your actual values in the `.env` file (see Environment Variables section below)
+Other scripts: `npm run build` (TypeScript), `npm run lint`, `npm run inspector` (MCP Inspector).
 
-5. Start the development server:
-```bash
-npm run dev
-```
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and fill in the following variables:
-
-### Required API Keys
-- `OPENAI_API_KEY` - Your OpenAI API key
-- `GOOGLE_API_KEY` - Your Google API key for Maps and Places
-- `FIREBASE_API_KEY` - Your Firebase API key
-- `FIREBASE_SDK` - Your Firebase service account JSON (as a string)
-
-### Service URLs
-- `CALENDAR_SERVICE_API` - Calendar service endpoint
-- `AUTHENTICATION_SERVICE_API` - Authentication service endpoint
-- `BUCKET_SERVICE_API` - Bucket service endpoint
-- `AI_SERVICE_API` - AI service endpoint
-
-### MCP Server URLs
-- `GOOGLE_MAPS_MCP_URL` - Google Maps MCP server URL
-- `CALENDAR_TODO_MCP_URL` - Calendar/Todo MCP server URL
-- `TICKETMASTER_MCP_URL` - Ticketmaster MCP server URL
-- `BROWSER_USE_MCP_URL` - Browser Use MCP server URL
-- `PLATINUM_MCP_URL` - Platinum List MCP server URL
-- `RATEHAWK_MCP_URL` - RateHawk Hotel MCP server URL
-- `AI_CONTAINER_WEBHOOK_URL` - AI container webhook URL
-
-### Database
-- `PERSISTENCE_MONGODB_URI` - MongoDB connection string
-
-### Other Services
-- `BLIP_API_KEY` - BLIP API key for calling services
-- `BLIP_WEBHOOK_SECRET` - BLIP webhook secret
-- `HOTEL_API_KEY` - Hotel booking API key
-- `TICKET_MASTER_API_KEY` - Ticketmaster API key
-- `PLATINUM_LIST_API_KEY` - Platinum List API key
-
-See `.env.example` for the complete list of environment variables.
-
-## Scripts
-
-- `npm start` - Start the production server
-- `npm run dev` - Start the development server with hot reload
-- `npm run build` - Build the TypeScript project
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors
-
-## Project Structure
+## Project structure
 
 ```
 src/
-├── agents/           # AI agent implementations
-├── config/           # Configuration files
-├── controllers/      # Route controllers
-├── middlewares/      # Express middlewares
-├── mcp-servers/      # MCP server configurations
-├── packages/         # Third-party packages
-├── repositories/     # Data access layer
-├── response/         # Response utilities
-├── routes/           # Express routes
-├── schemas/          # Validation schemas
-├── tools/            # Tool implementations
-├── types/            # TypeScript type definitions
-└── utils/            # Utility functions
+├── agents/        # agent factory, the four agents, swarm setup
+├── tools/         # hand-off tools, per-agent tool loaders, local tools
+├── mcp-servers/   # MCP server connections
+├── response/      # tool result → UI payload handlers
+├── controllers/   # chat controller
+├── routes/        # /ai-chat, /users, /test
+├── middlewares/   # auth, validation, request tracking, errors
+├── config/        # environment, database, Firebase
+└── packages/      # vendored MCP SDK and adapters
 ```
-
-## Security Notes
-
-- Never commit your `.env` file to version control
-- Keep your API keys secure and rotate them regularly
-- Use environment variables for all sensitive configuration
-- The `.gitignore` file is configured to exclude sensitive files
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-[Add your license information here]
